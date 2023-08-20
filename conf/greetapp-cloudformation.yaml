@@ -1,0 +1,428 @@
+# Create an EC2 key pair named greetapp-service, then execute the create-stack command.
+#
+# The IAM user that will execute the following command should have privileges as in greetapp-cloudformation-user-policy.json
+#
+# $ aws cloudformation create-stack --stack-name greetapp --capabilities CAPABILITY_NAMED_IAM --template-body file://greetapp-cloudformation.yaml
+
+Resources:
+
+  GreetAppVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.17.32.0/19
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: GreetAppVpc
+
+  GreetAppInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: GreetAppInternetGateway
+
+  GreetAppInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref GreetAppInternetGateway
+      VpcId: !Ref GreetAppVpc
+
+  GreetAppPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref GreetAppVpc
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.17.48.0/23
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: GreetAppPublicSubnetAZ1
+
+  GreetAppPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref GreetAppVpc
+      Tags:
+        - Key: Name
+          Value: GreetAppPublicRoutes
+
+  GreetAppDefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GreetAppInternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref GreetAppPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref GreetAppInternetGateway
+
+  GreetAppPublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref GreetAppPublicRouteTable
+      SubnetId: !Ref GreetAppPublicSubnet
+
+  GreetAppUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: false
+      Schema:
+        - Name: name
+          Required: true
+      UsernameAttributes:
+        - email
+      UsernameConfiguration:
+        CaseSensitive: false
+      UserPoolName: greetapp
+
+  GreetAppUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain:
+        !Sub
+          - 'greetapp-${RandomGUID}'
+          - { RandomGUID: !Select [0, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId ]]]] }
+      UserPoolId: !Ref GreetAppUserPool
+
+  GreetAppUserPoolClientDev:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      CallbackURLs:
+        - http://localhost:5000/?auth-redirect
+      ClientName: greetapp-dev
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+      LogoutURLs:
+        - http://localhost:5000/?logoff-redirec
+      PreventUserExistenceErrors: ENABLED
+      SupportedIdentityProviders:
+        - COGNITO
+      UserPoolId: !Ref GreetAppUserPool
+
+  GreetAppUserPoolClientProd:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      CallbackURLs:
+        - !Sub "https://${GreetAppCloudFrontDistribution.DomainName}/?auth-redirect"
+      ClientName: greetapp-prod
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+      LogoutURLs:
+        - !Sub "https://${GreetAppCloudFrontDistribution.DomainName}/?logoff-redirec"
+      PreventUserExistenceErrors: ENABLED
+      SupportedIdentityProviders:
+        - COGNITO
+      UserPoolId: !Ref GreetAppUserPool
+
+  GreetAppIdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      AllowClassicFlow: false
+      AllowUnauthenticatedIdentities: true
+      CognitoIdentityProviders:
+        - ClientId: !Ref GreetAppUserPoolClientDev
+          ProviderName: !GetAtt GreetAppUserPool.ProviderName
+          ServerSideTokenCheck: false
+        - ClientId: !Ref GreetAppUserPoolClientProd
+          ProviderName: !GetAtt GreetAppUserPool.ProviderName
+          ServerSideTokenCheck: false
+      IdentityPoolName: greetapp
+
+  GreetAppIdentityPoolRoleAttachment:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId: !Ref GreetAppIdentityPool
+      Roles:
+        "authenticated": !GetAtt GreetAppAuthRole.Arn
+        "unauthenticated": !GetAtt GreetAppUnauthRole.Arn
+
+  GreetAppAuthRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action: 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Ref GreetAppIdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": "authenticated"
+      Policies:
+        - PolicyName: Cognito_greetappAuth_Role_inline
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "mobileanalytics:PutEvents"
+                  - "cognito-sync:*"
+                  - "cognito-identity:*"
+                Resource: '*'
+      RoleName: Cognito_greetappAuth_Role
+
+  GreetAppUnauthRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action: 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Ref GreetAppIdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": "unauthenticated"
+      Policies:
+        - PolicyName: Cognito_greetappUnauth_Role_inline
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "mobileanalytics:PutEvents"
+                  - "cognito-sync:*"
+                Resource: '*'
+      RoleName: Cognito_greetappUnauth_Role
+
+  MessageTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "type"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "type"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: "5"
+        WriteCapacityUnits: "5"
+      TableName: "Message"
+
+  GreetAppServiceInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+       - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: DynamoDB_greetappServiceInstance_Role
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "dynamodb:GetItem"
+                  - "dynamodb:PutItem"
+                Resource: !GetAtt MessageTable.Arn
+      RoleName: EC2_greetappServiceInstance_Role
+  
+  GreetAppServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: greetapp-service-sg
+      GroupDescription: greetapp-service-sg
+      VpcId: !Ref GreetAppVpc
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourcePrefixListId: pl-3b927c52 # HTTPS from com.amazonaws.global.cloudfront.origin-facing
+
+  GreetAppServiceInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      InstanceProfileName: GreetAppServiceInstanceProfile
+      Roles: 
+        - !Ref GreetAppServiceInstanceRole
+
+  GreetAppServiceInstance:
+    Type: AWS::EC2::Instance
+    Properties: 
+      InstanceType: t2.micro
+      ImageId: ami-0b0dcb5067f052a63 # Amazon Linux 2 AMI
+      KeyName: greetapp-service
+      BlockDeviceMappings: 
+      - DeviceName: /dev/xvda
+        Ebs: 
+          VolumeType: gp2
+          DeleteOnTermination: true
+          VolumeSize: 8
+      SecurityGroupIds:
+        - !Ref GreetAppServiceSecurityGroup
+      SubnetId: !Ref GreetAppPublicSubnet
+      IamInstanceProfile: !Ref GreetAppServiceInstanceProfile
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            yum install -y java-17-amazon-corretto-headless
+  
+  GreetAppWebClientS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName:
+        !Sub
+          - 'greetapp-webclient-${RandomGUID}'
+          - { RandomGUID: !Select [0, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId ]]]] }
+      WebsiteConfiguration:
+        IndexDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+    DeletionPolicy: Delete
+
+  GreetAppWebClientS3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref GreetAppWebClientS3Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${GreetAppWebClientS3Bucket.Arn}/*
+            Condition:
+              StringEquals:
+                "AWS:SourceArn": !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${GreetAppCloudFrontDistribution}"
+  
+  GreetAppOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties: 
+      OriginAccessControlConfig: 
+          Name: !Sub ${GreetAppWebClientS3Bucket}.s3.${AWS::Region}.amazonaws.com
+          OriginAccessControlOriginType: s3
+          SigningBehavior: always
+          SigningProtocol: sigv4
+
+  GreetAppCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties: 
+      DistributionConfig:
+        PriceClass: PriceClass_100
+        DefaultRootObject: index.html
+        Origins:
+          - DomainName: !Sub ${GreetAppWebClientS3Bucket}.s3.${AWS::Region}.amazonaws.com
+            Id: greetapp-webclient
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+            OriginAccessControlId: !Ref GreetAppOriginAccessControl
+          - DomainName: !GetAtt GreetAppServiceInstance.PublicDnsName
+            Id: greetapp-service
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+              HTTPPort: 8080
+            OriginAccessControlId: ''
+        Enabled: true
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+          TargetOriginId: greetapp-webclient
+          ForwardedValues:
+            QueryString: 'false'
+            Cookies:
+              Forward: none
+          ViewerProtocolPolicy: https-only
+        CacheBehaviors:
+          - PathPattern: '/greet'
+            TargetOriginId: greetapp-service
+            Compress: true
+            ViewerProtocolPolicy: https-only
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+              - PUT
+              - POST
+              - PATCH
+              - DELETE
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # "Managed-CachingDisabled"
+
+Outputs:
+
+  UserPoolId:
+    Value: !GetAtt GreetAppUserPool.ProviderName
+    Export:
+      Name: GREET-APP-USER-POOL-ID
+
+  UserPoolDomain:
+    Value: !Ref GreetAppUserPoolDomain
+    Export:
+      Name: GREET-APP-USER-POOL-DOMAIN
+
+  UserPoolAppClientIdDev:
+    Value: !Ref GreetAppUserPoolClientDev
+    Export:
+      Name: GREET-APP-USER-POOL-APP-CLIENT-ID-DEV
+
+  UserPoolAppClientIdProd:
+    Value: !Ref GreetAppUserPoolClientProd
+    Export:
+      Name: GREET-APP-USER-POOL-APP-CLIENT-ID-PROD
+
+  IdentityPoolId:
+    Value: !Ref GreetAppIdentityPool
+    Export:
+      Name: GREET-APP-IDENTITY-POOL-ID
+  
+  ServiceInstanceIs:
+    Value: !Ref GreetAppServiceInstance
+    Export:
+      Name: GREET-APP-SERVICE-INSTANCE-ID
+  
+  ServiceInstancePublicDnsName:
+    Value: !GetAtt GreetAppServiceInstance.PublicDnsName
+    Export:
+      Name: GREET-APP-SERVICE-INSTANCE-PUBLIC-DNS-NAME
+  
+  CloudFrontDistributionDomain:
+    Value: !GetAtt GreetAppCloudFrontDistribution.DomainName
+    Export:
+      Name: GREET-APP-CLOUDFRONT-DOMAIN

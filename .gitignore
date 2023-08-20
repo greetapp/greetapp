@@ -1,0 +1,10 @@
+webclient/node_modules
+webclient/.env.development
+webclient/.env.production
+webclient/dist/greetapp.min.js
+webclient/dist/greetapp.min.js.map
+
+service/target
+service/.vscode
+service/.env.development
+service/.env.production
