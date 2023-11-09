@@ -67,6 +67,7 @@
                 "cognito-idp:DeleteUserPool",
                 "cognito-idp:DeleteUserPoolClient",
                 "cognito-idp:DeleteUserPoolDomain",
+                "cognito-idp:DescribeUserPool",
                 "cognito-idp:ListTagsForResource",
                 "cognito-idp:UpdateUserPool",
                 "cognito-idp:UpdateUserPoolClient"
@@ -158,10 +159,10 @@
                 "iam:AddRoleToInstanceProfile",
                 "iam:CreateInstanceProfile",
                 "iam:DeleteInstanceProfile",
+                "iam:GetInstanceProfile",
                 "iam:RemoveRoleFromInstanceProfile"
             ],
             "Resource": [
-                "arn:aws:iam::*:instance-profile/DemoRoleForEC22",
                 "arn:aws:iam::*:instance-profile/GreetAppServiceInstanceProfile"
             ]
         },

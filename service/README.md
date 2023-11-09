@@ -22,7 +22,7 @@ mvn clean package
 
 Run the application with `java -jar`, using the env command to load variables from the `.env.development` file to the execution environment.
 ```bash
-env $(cat .env.development) java -jar target/target/greetapp-1.0-SNAPSHOT.jar
+env $(cat .env.development) java -jar target/greetapp-1.0-SNAPSHOT.jar
 ```
 
 The IAM user running the application locally should have the same privileges that were given to the EC2_greetappServiceInstance_Role.
