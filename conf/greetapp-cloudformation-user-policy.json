@@ -43,13 +43,44 @@
                 "ec2:DisassociateRouteTable",
                 "ec2:ModifySubnetAttribute",
                 "ec2:ModifyVpcAttribute"
-
             ],
             "Resource": [
                 "arn:aws:ec2:*:*:internet-gateway/*",
                 "arn:aws:ec2:*:*:route-table/*",
                 "arn:aws:ec2:*:*:subnet/*",
                 "arn:aws:ec2:*:*:vpc/*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "elasticloadbalancing:DescribeListeners",
+                "elasticloadbalancing:DescribeLoadBalancers",
+                "elasticloadbalancing:DescribeTargetGroups",
+                "elasticloadbalancing:DescribeTargetHealth"
+            ],
+            "Resource": [
+                "*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "elasticloadbalancing:CreateListener",
+                "elasticloadbalancing:CreateLoadBalancer",
+                "elasticloadbalancing:CreateTargetGroup",
+                "elasticloadbalancing:DeleteListener",
+                "elasticloadbalancing:DeleteLoadBalancer",
+                "elasticloadbalancing:DeleteTargetGroup",
+                "elasticloadbalancing:DeregisterTargets",
+                "elasticloadbalancing:ModifyListener",
+                "elasticloadbalancing:ModifyTargetGroup",
+                "elasticloadbalancing:RegisterTargets"
+            ],
+            "Resource": [
+                "arn:aws:elasticloadbalancing:*:*:listener/*",
+                "arn:aws:elasticloadbalancing:*:*:loadbalancer/*",
+                "arn:aws:elasticloadbalancing:*:*:targetgroup/*"
             ]
         },
         {

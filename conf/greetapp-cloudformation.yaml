@@ -29,16 +29,27 @@ Resources:
       InternetGatewayId: !Ref GreetAppInternetGateway
       VpcId: !Ref GreetAppVpc
 
-  GreetAppPublicSubnet:
+  GreetAppPublicSubnetAZ1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref GreetAppVpc
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
       CidrBlock: 10.17.48.0/23
-      MapPublicIpOnLaunch: true
+      MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
           Value: GreetAppPublicSubnetAZ1
+
+  GreetAppPublicSubnetAZ2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref GreetAppVpc
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.17.50.0/23
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: GreetAppPublicSubnetAZ2
 
   GreetAppPublicRouteTable:
     Type: AWS::EC2::RouteTable
@@ -56,11 +67,17 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref GreetAppInternetGateway
 
-  GreetAppPublicSubnetRouteTableAssociation:
+  GreetAppPublicSubnetAz1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref GreetAppPublicRouteTable
-      SubnetId: !Ref GreetAppPublicSubnet
+      SubnetId: !Ref GreetAppPublicSubnetAZ1
+
+  GreetAppPublicSubnetAz2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref GreetAppPublicRouteTable
+      SubnetId: !Ref GreetAppPublicSubnetAZ2
 
   GreetAppUserPool:
     Type: AWS::Cognito::UserPool
@@ -254,7 +271,22 @@ Resources:
                   - "dynamodb:PutItem"
                 Resource: !GetAtt MessageTable.Arn
       RoleName: EC2_greetappServiceInstance_Role
-  
+
+  GreetAppServiceAlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: greetapp-service-alb-sg
+      GroupDescription: greetapp-service-alb-sg
+      VpcId: !Ref GreetAppVpc
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourcePrefixListId: pl-3b927c52 # HTTPS from com.amazonaws.global.cloudfront.origin-facing
+
   GreetAppServiceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -268,7 +300,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 8080
           ToPort: 8080
-          SourcePrefixListId: pl-3b927c52 # HTTPS from com.amazonaws.global.cloudfront.origin-facing
+          SourceSecurityGroupId: !GetAtt GreetAppServiceAlbSecurityGroup.GroupId
 
   GreetAppServiceInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -281,7 +313,7 @@ Resources:
     Type: AWS::EC2::Instance
     Properties: 
       InstanceType: t2.micro
-      ImageId: ami-0b0dcb5067f052a63 # Amazon Linux 2 AMI
+      ImageId: ami-05c13eab67c5d8861 # Amazon Linux 2023 (us-east-1) AMI
       KeyName: greetapp-service
       BlockDeviceMappings: 
       - DeviceName: /dev/xvda
@@ -289,16 +321,54 @@ Resources:
           VolumeType: gp2
           DeleteOnTermination: true
           VolumeSize: 8
-      SecurityGroupIds:
-        - !Ref GreetAppServiceSecurityGroup
-      SubnetId: !Ref GreetAppPublicSubnet
       IamInstanceProfile: !Ref GreetAppServiceInstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          SubnetId: !Ref GreetAppPublicSubnetAZ1
+          GroupSet:
+            - !Ref GreetAppServiceSecurityGroup
       UserData:
         Fn::Base64:
           !Sub |
             #!/bin/bash
             yum install -y java-17-amazon-corretto-headless
-  
+
+  GreetAppServiceAlbTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: greetapp-service-tg
+      Protocol: HTTP
+      Port: 8080
+      VpcId: !Ref GreetAppVpc
+      HealthCheckPath: /greet
+      TargetType: instance
+      Targets:
+      - Id: !Ref GreetAppServiceInstance
+        Port: 8080
+
+  GreetAppServiceAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: greetapp-service-alb
+      Type: application
+      Scheme: internet-facing
+      SecurityGroups:
+      - !Ref GreetAppServiceAlbSecurityGroup
+      Subnets:
+      - !Ref GreetAppPublicSubnetAZ1
+      - !Ref GreetAppPublicSubnetAZ2
+
+  GreetAppServiceAlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref GreetAppServiceAlb
+      Protocol: HTTP
+      Port: 8080
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn: !Ref GreetAppServiceAlbTargetGroup
+
   GreetAppWebClientS3Bucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -353,7 +423,7 @@ Resources:
             S3OriginConfig:
               OriginAccessIdentity: ''
             OriginAccessControlId: !Ref GreetAppOriginAccessControl
-          - DomainName: !GetAtt GreetAppServiceInstance.PublicDnsName
+          - DomainName: !GetAtt GreetAppServiceAlb.DNSName
             Id: greetapp-service
             CustomOriginConfig:
               OriginProtocolPolicy: http-only
@@ -416,11 +486,6 @@ Outputs:
     Value: !Ref GreetAppServiceInstance
     Export:
       Name: GREET-APP-SERVICE-INSTANCE-ID
-  
-  ServiceInstancePublicDnsName:
-    Value: !GetAtt GreetAppServiceInstance.PublicDnsName
-    Export:
-      Name: GREET-APP-SERVICE-INSTANCE-PUBLIC-DNS-NAME
   
   CloudFrontDistributionDomain:
     Value: !GetAtt GreetAppCloudFrontDistribution.DomainName
