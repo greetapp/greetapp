@@ -1,0 +1,29 @@
+# Execute this create-stack command and put the compiled function jar file in the bucket before creating the main stack.
+#
+# The IAM user that will execute the following command should have privileges as in greetapp-cloudformation-user-policy.json
+#
+# $ aws cloudformation create-stack --stack-name deployment-bucket --capabilities CAPABILITY_NAMED_IAM --template-body file://deployment-bucket-cloudformation.yaml
+
+Resources:
+
+  GreetAppServiceFunctionS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName:
+        !Sub
+          - 'greetapp-service-${RandomGUID}'
+          - { RandomGUID: !Select [0, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId ]]]] }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+    DeletionPolicy: Delete
+
+Outputs:
+
+  ServiceFunctionBucket:
+    Value: !Ref GreetAppServiceFunctionS3Bucket
+    Export:
+      Name: GREET-APP-SERVICE-FUNCTION-BUCKET
