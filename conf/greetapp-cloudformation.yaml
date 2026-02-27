@@ -224,7 +224,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: GreetApp-Greet
-      Runtime: java21
+      Runtime: java25
       Timeout: 15
       MemorySize: 512
       Architectures:
