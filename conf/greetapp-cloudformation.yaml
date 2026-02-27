@@ -3,9 +3,15 @@
 #
 # The IAM user that will execute the following command should have privileges as in greetapp-cloudformation-user-policy.json
 #
-# $ aws cloudformation create-stack --stack-name greetapp --capabilities CAPABILITY_NAMED_IAM --template-body file://greetapp-cloudformation.yaml
+# $ aws cloudformation create-stack --stack-name greetapp --capabilities CAPABILITY_NAMED_IAM --template-body file://greetapp-cloudformation.yaml --parameters ParameterKey=GreetAppFunctionS3Version,ParameterValue=33BepaY_eMQwvqcS7T2wkjdSpPQUnxhZ ParameterKey=DevUserParameter,ParameterValue=my-dev-user
 #
 # Then configure the environment of the lambda function according to the service README file.
+
+Parameters:
+  GreetAppFunctionS3Version:
+    Type: String
+  DevUserParameter:
+    Type: String
 
 Resources:
 
@@ -164,7 +170,7 @@ Resources:
                 Resource: '*'
       RoleName: Cognito_greetappUnauth_Role
 
-  MessageTable:
+  GreetAppMessageTable:
     Type: AWS::DynamoDB::Table
     Properties:
       AttributeDefinitions:
@@ -176,7 +182,7 @@ Resources:
       ProvisionedThroughput:
         ReadCapacityUnits: "5"
         WriteCapacityUnits: "5"
-      TableName: "Message"
+      TableName: "GreetApp_Message"
 
   GreetAppServiceFunctionRole:
     Type: AWS::IAM::Role
@@ -187,6 +193,7 @@ Resources:
           - Effect: Allow
             Principal:
               Service: lambda.amazonaws.com
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:user/${DevUserParameter}'
             Action: sts:AssumeRole
       Policies:
         - PolicyName: Logs_greetappServiceFunction_Role
@@ -201,7 +208,7 @@ Resources:
                 Action:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/greetapp-service:*'
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/GreetApp-Greet:*'
         - PolicyName: DynamoDB_greetappServiceFunction_Role
           PolicyDocument:
             Version: '2012-10-17'
@@ -210,13 +217,13 @@ Resources:
                 Action:
                   - dynamodb:GetItem
                   - dynamodb:PutItem
-                Resource: !GetAtt MessageTable.Arn
+                Resource: !GetAtt GreetAppMessageTable.Arn
       RoleName: Lambda_greetappService_Role
 
   GreetAppServiceFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: greetapp-service
+      FunctionName: GreetApp-Greet
       Runtime: java21
       Timeout: 15
       MemorySize: 512
@@ -226,6 +233,7 @@ Resources:
         S3Bucket:
           Fn::ImportValue: GREET-APP-SERVICE-FUNCTION-BUCKET
         S3Key: greetapp-1.0-SNAPSHOT.jar
+        S3ObjectVersion: !Ref GreetAppFunctionS3Version
       Role: !GetAtt GreetAppServiceFunctionRole.Arn
       Handler: io.github.greetapp.LambdaMethodHandler
       TracingConfig:

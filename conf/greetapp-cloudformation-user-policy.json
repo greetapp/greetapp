@@ -10,7 +10,7 @@
             ],
             "Resource": [
                 "arn:aws:cloudformation:*:*:stack/greetapp/*",
-                "arn:aws:cloudformation:*:*:stack/deployment-bucket/*"
+                "arn:aws:cloudformation:*:*:stack/greetapp-deployment/*"
             ]
         },
         {
@@ -59,7 +59,7 @@
                 "dynamodb:DescribeTable",
                 "dynamodb:UpdateTable"
             ],
-            "Resource": "arn:aws:dynamodb:*:*:table/Message"
+            "Resource": "arn:aws:dynamodb:*:*:table/GreetApp_Message"
         },
         {
             "Effect": "Allow",
@@ -88,13 +88,15 @@
                 "s3:DeleteBucket",
                 "s3:DeleteBucketPolicy",
                 "s3:GetBucketPolicy",
+                "s3:GetObjectVersion",
                 "s3:PutBucketPolicy",
                 "s3:PutBucketPublicAccessBlock",
-                "s3:PutBucketWebsite"
+                "s3:PutBucketWebsite",
+                "s3:PutBucketVersioning"
             ],
             "Resource": [
                 "arn:aws:s3:::greetapp-webclient-*",
-                "arn:aws:s3:::greetapp-service-*"
+                "arn:aws:s3:::greetapp-deployment-*"
             ]
         },
         {
@@ -149,7 +151,7 @@
                 "lambda:UpdateFunctionUrlConfig"
             ],
             "Resource": [
-                "arn:aws:lambda:*:*:function:greetapp-service"
+                "arn:aws:lambda:*:*:function:GreetApp-Greet"
             ]
         }
     ]

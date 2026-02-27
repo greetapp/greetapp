@@ -2,7 +2,7 @@
 #
 # The IAM user that will execute the following command should have privileges as in greetapp-cloudformation-user-policy.json
 #
-# $ aws cloudformation create-stack --stack-name deployment-bucket --capabilities CAPABILITY_NAMED_IAM --template-body file://deployment-bucket-cloudformation.yaml
+# $ aws cloudformation create-stack --stack-name greetapp-deployment --capabilities CAPABILITY_NAMED_IAM --template-body file://greetapp-deployment-cloudformation.yaml
 
 Resources:
 
@@ -12,8 +12,10 @@ Resources:
       AccessControl: Private
       BucketName:
         !Sub
-          - 'greetapp-service-${RandomGUID}'
+          - 'greetapp-deployment-${RandomGUID}'
           - { RandomGUID: !Select [0, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId ]]]] }
+      VersioningConfiguration:
+        Status: Enabled
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true

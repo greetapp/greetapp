@@ -64,7 +64,7 @@ public class GreetService implements Service {
     private String getGreetingMessage() {
         String greetingAttName = "text";
 
-        return this.ddb.getDynamoDBItem("Message", "type", "greeting").map(returnedItem -> {
+        return this.ddb.getDynamoDBItem("GreetApp_Message", "type", "greeting").map(returnedItem -> {
             AttributeValue text = returnedItem.get(greetingAttName);
             if (text == null) {
                 System.out.format("No attribute named '%s' on the item\n", greetingAttName);
@@ -86,7 +86,7 @@ public class GreetService implements Service {
                 .s(greeting)
                 .build());
 
-        this.ddb.putDynamoDBItem("Message", itemValue);
+        this.ddb.putDynamoDBItem("GreetApp_Message", itemValue);
         LOGGER.info("Greeting message was updated to " + greeting);
     }
 
