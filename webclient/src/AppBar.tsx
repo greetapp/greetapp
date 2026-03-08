@@ -9,20 +9,37 @@ import {
 	Toolbar,
 } from "@mui/material";
 import { useRef, useState } from "react";
-import { useAppBarState } from "react-aws-cognito-lambda-dynamodb-base-prototype-app";
+import {
+	type AppRoute,
+	useAppBarState,
+} from "react-aws-cognito-lambda-dynamodb-base-prototype-app";
 
-const LoginButton = ({ hideLoginButton, appExternalLoginUrl }) =>
+type LoginButtonProps = {
+	hideLoginButton: boolean;
+	appExternalLoginUrl: string;
+};
+
+const LoginButton = ({
+	hideLoginButton,
+	appExternalLoginUrl,
+}: LoginButtonProps) =>
 	hideLoginButton ? null : (
 		<Button color="inherit" href={appExternalLoginUrl}>
 			Login
 		</Button>
 	);
 
+type AccountButtonProps = {
+	hideAccountButton: boolean;
+	userName: string;
+	logoffAndShowMessage: () => void;
+};
+
 const AccountButton = ({
 	hideAccountButton,
 	userName,
 	logoffAndShowMessage,
-}) => {
+}: AccountButtonProps) => {
 	const [accountMenuOpened, setAccountMenuOpened] = useState(false);
 	const accountMenuRef = useRef(null);
 
@@ -63,7 +80,11 @@ const AccountButton = ({
 	);
 };
 
-const AppBar = ({ routes }) => {
+type AppBarProps = {
+	routes: AppRoute[];
+};
+
+const AppBar = ({ routes }: AppBarProps) => {
 	const {
 		hideLoginButton,
 		appExternalLoginUrl,
@@ -82,7 +103,7 @@ const AppBar = ({ routes }) => {
 					/>
 					<AccountButton
 						hideAccountButton={hideAccountButton}
-						userName={userName}
+						userName={userName || "No User"}
 						logoffAndShowMessage={logoffAndShowMessage}
 					/>
 				</div>

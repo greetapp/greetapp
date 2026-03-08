@@ -1,6 +1,6 @@
+import { StrictMode } from "react";
 import { makeAppConfig } from "react-aws-cognito-lambda-dynamodb-base-prototype-app";
 import { createRoot } from "react-dom/client";
-
 import BaseApp from "./BaseApp";
 import Greeting from "./Greeting";
 
@@ -22,14 +22,14 @@ const myAppMessages = {
 };
 
 const myEnv = {
-	appHost: process.env.REACT_APP_HOST,
-	appBasePath: process.env.REACT_APP_BASE_PATH,
-	appLogoUrl: process.env.REACT_APP_LOGO_URL,
-	appRegion: process.env.REACT_APP_AWS_REGION,
-	appUserPoolId: process.env.REACT_APP_USER_POOL_ID,
-	appUserPoolDomain: process.env.REACT_APP_USER_POOL_DOMAIN,
-	appClientId: process.env.REACT_APP_USER_POOL_APP_CLIENT_ID,
-	appIdentityPoolId: process.env.REACT_APP_IDENTITY_POOL_ID,
+	appHost: import.meta.env.VITE_APP_HOST,
+	appBasePath: import.meta.env.VITE_APP_BASE_PATH,
+	appLogoUrl: import.meta.env.VITE_APP_LOGO_URL,
+	appRegion: import.meta.env.VITE_APP_AWS_REGION,
+	appUserPoolId: import.meta.env.VITE_APP_USER_POOL_ID,
+	appUserPoolDomain: import.meta.env.VITE_APP_USER_POOL_DOMAIN,
+	appClientId: import.meta.env.VITE_APP_USER_POOL_APP_CLIENT_ID,
+	appIdentityPoolId: import.meta.env.VITE_APP_IDENTITY_POOL_ID,
 };
 
 const appConfig = makeAppConfig({
@@ -51,5 +51,12 @@ const appRoutes = [
 
 const App = () => <BaseApp appRoutes={appRoutes} appConfig={appConfig} />;
 
-const root = createRoot(document.getElementById("app_container"));
-root.render(<App />);
+const rootNode = document.getElementById("app_container");
+
+if (rootNode) {
+	createRoot(rootNode).render(
+		<StrictMode>
+			<App />
+		</StrictMode>,
+	);
+}
